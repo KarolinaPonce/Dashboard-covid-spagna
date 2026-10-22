@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spagna - Il Covid 19: i dati | Dashboard Pro</title>
+    
+    <!-- Google Fonts: Inter per un look moderno e professionale -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- PapaParse & Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0B0E14;
+            --panel-bg: rgba(15, 23, 42, 0.9);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #38bdf8;
+            --accent-red: #f43f5e;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden; 
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #map { 
+            height: 100vh; 
+            width: 100vw; 
+            z-index: 1; 
+            background: #0B0E14;
+        }
+
+        /* TRUCCO CSS: Trasforma la mappa chiara in scura senza API KEY */
+        .leaflet-tile-pane {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .glass-panel {
+            position: absolute;
+            top: 20px;
+            z-index: 1000;
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            padding: 24px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .glass-panel::-webkit-scrollbar { width: 6px; }
+        .glass-panel::-webkit-scrollbar-track { background: transparent; }
+        .glass-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+        .left-panel { left: 20px; width: 340px; }
+        .right-panel { right: 20px; width: 360px; animation-delay: 0.2s; }
+
+        .student-info {
+            background: rgba(56, 189, 248, 0.1);
+            border-left: 3px solid var(--accent-blue);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .student-info strong { color: var(--accent-blue); display: block; margin-bottom: 4px; font-size: 14px; }
+        .student-info span { color: var(--text-secondary); }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-secondary);
+            margin: 24px 0 12px 0;
+            font-weight: 600;
+        }
+        h3:first-of-type { margin-top: 0; }
+
+        .control-group { margin-bottom: 16px; }
+        .control-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        select, input[type="range"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--panel-border);
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        select:focus { border-color: var(--accent-blue); }
+
+        .slider-value {
+            text-align: right;
+            font-weight: 600;
+            color: var(--accent-blue);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--accent-blue), #0284c7);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-align: center;
+            display: block;
+            text-decoration: none;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3); }
+        
+        .btn-play {
+            background: linear-gradient(135deg, #10b981, #059669);
+            margin-top: 10px;
+        }
+        .btn-play.playing {
+            background: linear-gradient(135deg, var(--accent-red), #e11d48);
+            animation: pulse-btn 1.5s infinite;
+        }
+        @keyframes pulse-btn {
+            0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+            70% { box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+        }
+
+        #csvFile { display: none; }
+
+        .status-msg {
+            font-size: 12px;
+            margin-top: 16px;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            color: var(--text-secondary);
+        }
+
+        .chart-box {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--panel-border);
+        }
+        .chart-box canvas { max-height: 180px; }
+
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            color: var(--text-primary);
+            border-radius: 12px;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .custom-popup .leaflet-popup-tip { background: var(--panel-bg); border: 1px solid var(--panel-border); }
+        .custom-popup .leaflet-popup-content { margin: 16px; font-size: 13px; line-height: 1.6; }
+        .popup-title { font-size: 16px; font-weight: 700; color: var(--accent-blue); margin-bottom: 12px; border-bottom: 1px solid var(--panel-border); padding-bottom: 8px; }
+        .stat-row { display: flex; justify-content: space-between; margin: 6px 0; }
+        .stat-row span { color: var(--text-secondary); }
+        .stat-row strong { color: var(--text-primary); }
+        .chart-container-popup { width: 100%; height: 150px; margin-top: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 8px; }
+
+        @keyframes pulse-marker {
+            0% { stroke-width: 1.5; fill-opacity: 0.8; }
+            50% { stroke-width: 4; fill-opacity: 0.4; }
+            100% { stroke-width: 1.5; fill-opacity: 0.8; }
+        }
+        .pulsing-marker { animation: pulse-marker 2s infinite ease-in-out; }
+
+        @media (max-width: 1100px) {
+            .left-panel { width: 300px; }
+            .right-panel { width: 300px; }
+        }
+        @media (max-width: 768px) {
+            .left-panel { width: calc(100% - 40px); top: auto; bottom: 20px; max-height: 45vh; }
+            .right-panel { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Pannello Sinistro -->
+<div class="glass-panel left-panel">
+    <h1>Spagna - Il Covid 19: i dati</h1>
+    
+    <div class="student-info">
+        <strong>Karolina Ponce</strong>
+        <span>Matricola: s6359904</span><br>
+        <span>Corso: Metodi quali-quantitativi</span>
+    </div>
+
+    <p class="description">
+        Benvenuto nella dashboard analitica. Carica il dataset CSV per visualizzare l'impatto della pandemia. 
+        Usa i filtri per esplorare i dati per periodo, genere e fascia d'età. La mappa e i grafici si aggiorneranno in tempo reale.
+    </p>
+
+    <label for="csvFile" class="btn-primary">📂 Carica Dataset CSV</label>
+    <input type="file" id="csvFile" accept=".csv">
+
+    <button class="btn-primary btn-play" id="playBtn" onclick="togglePlay()">▶️ Avvia Animazione Temporale</button>
+
+    <h3>Filtri Interattivi</h3>
+    
+    <div class="control-group">
+        <label for="timeSlider">Periodo (Mese)</label>
+        <input type="range" id="timeSlider" min="0" max="0" value="0" disabled>
+        <div class="slider-value" id="sliderValue">--</div>
+    </div>
+
+    <div class="control-group">
+        <label for="mapMetric">Metrica sulla Mappa</label>
+        <select id="mapMetric">
+            <option value="cases">Casi Totali</option>
+            <option value="hosp">Ricoveri</option>
+            <option value="icu">Terapia Intensiva (ICU)</option>
+            <option value="deaths">Decessi</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label for="sexFilter">Genere</label>
+        <select id="sexFilter">
+            <option value="all">Tutti</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label for="ageFilter">Fascia d'Età</label>
+        <select id="ageFilter">
+            <option value="all">Tutte le fasce</option>
+        </select>
+    </div>
+
+    <div id="statusMsg" class="status-msg">In attesa del caricamento dati...</div>
+</div>
+
+<!-- Pannello Destro: Dashboard -->
+<div class="glass-panel right-panel">
+    <h1>Analisi in Tempo Reale</h1>
+    
+    <h3>🏆 Top 5 Province</h3>
+    <div class="chart-box">
+        <canvas id="chartTopProvinces"></canvas>
+    </div>
+
+    <h3>👥 Distribuzione per Età</h3>
+    <div class="chart-box">
+        <canvas id="chartAgeDist"></canvas>
+    </div>
+
+    <h3>⚧️ Confronto per Genere</h3>
+    <div class="chart-box">
+        <canvas id="chartGender"></canvas>
+    </div>
+
+    <h3>📈 Andamento Temporale (Casi)</h3>
+    <div class="chart-box">
+        <canvas id="chartTrend"></canvas>
+    </div>
+</div>
+
+<script>
+    // 1. Inizializzazione Mappa con Esri (PROVATO E FUNZIONANTE, NO API KEY)
+    const map = L.map('map', { zoomControl: false }).setView([40.4168, -3.7038], 6);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19
+    }).addTo(map);
+
+    let rawData = [];
+    let uniquePeriods = [];
+    let markersLayer = L.layerGroup().addTo(map);
+    let activePopupChart = null;
+
+    let chartTopProvinces = null;
+    let chartAgeDist = null;
+    let chartGender = null;
+    let chartTrend = null;
+
+    const timeSlider = document.getElementById('timeSlider');
+    const sliderValue = document.getElementById('sliderValue');
+    const mapMetricSelect = document.getElementById('mapMetric');
+    const sexFilter = document.getElementById('sexFilter');
+    const ageFilter = document.getElementById('ageFilter');
+    const statusMsg = document.getElementById('statusMsg');
+    const playBtn = document.getElementById('playBtn');
+
+    let isPlaying = false;
+    let playInterval = null;
+
+    function getData(row, headerName, fallbackIndex) {
+        if (row[headerName] !== undefined) return row[headerName];
+        const keys = Object.keys(row);
+        if (keys.length > fallbackIndex) return row[keys[fallbackIndex]];
+        return null;
+    }
+
+    function processData(data) {
+        rawData = data;
+        statusMsg.innerText = 'Elaborazione dati in corso...';
+        statusMsg.style.color = '#38bdf8';
+
+        const periods = [...new Set(data.map(d => getData(d, 'period', 0)).filter(Boolean))].sort();
+        const sexes = [...new Set(data.map(d => getData(d, 'sex', 3)).filter(Boolean))].sort();
+        const ages = [...new Set(data.map(d => getData(d, 'age_group', 4)).filter(Boolean))].sort();
+
+        if (periods.length === 0) {
+            statusMsg.innerText = 'Errore: colonna "period" non trovata.';
+            statusMsg.style.color = '#f43f5e';
+            return;
+        }
+
+        uniquePeriods = periods;
+        timeSlider.max = periods.length - 1;
+        timeSlider.value = periods.length - 1; 
+        timeSlider.disabled = false;
+        sliderValue.innerText = periods[periods.length - 1];
+
+        sexFilter.innerHTML = '<option value="all">Tutti</option>';
+        sexes.forEach(s => { sexFilter.innerHTML += `<option value="${s}">${s}</option>`; });
+
+        ageFilter.innerHTML = '<option value="all">Tutte le fasce</option>';
+        ages.forEach(a => { ageFilter.innerHTML += `<option value="${a}">${a}</option>`; });
+
+        statusMsg.innerText = `✅ Caricate ${data.length} righe. Dashboard pronta.`;
+        statusMsg.style.color = '#10b981';
+        
+        updateAll();
+    }
+
+    function updateAll() {
+        updateMap();
+        updateDashboard();
+    }
+
+    function updateMap() {
+        if (activePopupChart) { activePopupChart.destroy(); activePopupChart = null; }
+        markersLayer.clearLayers();
+        
+        const selectedPeriod = uniquePeriods[timeSlider.value];
+        const selectedSex = sexFilter.value;
+        const selectedAge = ageFilter.value;
+        const metric = mapMetricSelect.value;
+
+        sliderValue.innerText = selectedPeriod;
+
+        const filteredData = rawData.filter(row => {
+            if (selectedPeriod && getData(row, 'period', 0) !== selectedPeriod) return false;
+            if (selectedSex !== 'all' && getData(row, 'sex', 3) !== selectedSex) return false;
+            if (selectedAge !== 'all' && getData(row, 'age_group', 4) !== selectedAge) return false;
+            return true;
+        });
+
+        const aggregated = {};
+        filteredData.forEach(row => {
+            const region = getData(row, 'region_name', 1);
+            if (!region || region.length < 3) return; // Filtro anti-refuso "A"
+
+            if (!aggregated[region]) {
+                aggregated[region] = { 
+                    name: region, 
+                    lat: parseFloat(getData(row, 'latitude', 12)) || 0, 
+                    lon: parseFloat(getData(row, 'longitude', 13)) || 0, 
+                    cases: 0, hosp: 0, icu: 0, deaths: 0, pctSum: 0 
+                };
+            }
+            aggregated[region].cases += Number(getData(row, 'cases', 5)) || 0;
+            aggregated[region].hosp += Number(getData(row, 'hospitalizations', 6)) || 0;
+            aggregated[region].icu += Number(getData(row, 'icu_admissions', 7)) || 0;
+            aggregated[region].deaths += Number(getData(row, 'deaths', 8)) || 0;
+            aggregated[region].pctSum += Number(getData(row, 'percentage_within_province', 9)) || 0;
+        });
+
+        const maxVal = Math.max(...Object.values(aggregated).map(d => d[metric]), 1);
+
+        Object.values(aggregated).forEach((d, index) => {
+            if (d.lat === 0 && d.lon === 0) return; 
+
+            const currentMetricValue = d[metric];
+            const radius = Math.max(6, Math.sqrt(currentMetricValue / maxVal) * 35);
+            const intensity = currentMetricValue / maxVal;
+            
+            const r = Math.round(56 + (244 - 56) * intensity);
+            const g = Math.round(189 + (63 - 189) * intensity);
+            const b = Math.round(248 + (94 - 248) * intensity);
+            const color = `rgba(${r}, ${g}, ${b}, 0.8)`;
+            const borderColor = `rgb(${Math.min(255, r+40)}, ${Math.min(255, g+40)}, ${Math.min(255, b+40)})`;
+            const markerClass = currentMetricValue > (maxVal * 0.5) ? 'pulsing-marker' : '';
+
+            const marker = L.circleMarker([d.lat, d.lon], {
+                radius: radius, fillColor: color, color: borderColor, weight: 1.5, opacity: 1, fillOpacity: 0.85, className: markerClass
+            });
+
+            const mortalityRate = d.cases > 0 ? ((d.deaths / d.cases) * 100).toFixed(2) : "0.00";
+            let popupContent = `<div class="popup-title">${d.name}</div>`;
+            
+            if (d.cases === 0 && d.hosp === 0 && d.icu === 0 && d.deaths === 0) {
+                popupContent += `<div style="text-align:center; color:#94a3b8; padding:10px;">Nessun dato per questo filtro.</div>`;
+            } else {
+                popupContent += `
+                    <div class="stat-row"><span>Casi Totali:</span> <strong>${d.cases.toLocaleString('it-IT')}</strong></div>
+                    <div class="stat-row"><span>Ricoveri:</span> <strong>${d.hosp.toLocaleString('it-IT')}</strong></div>
+                    <div class="stat-row"><span>Terapia Intensiva:</span> <strong>${d.icu.toLocaleString('it-IT')}</strong></div>
+                    <div class="stat-row"><span>Decessi:</span> <strong style="color:#f43f5e">${d.deaths.toLocaleString('it-IT')}</strong></div>
+                    <div class="stat-row"><span>Tasso Mortalità:</span> <strong>${mortalityRate}%</strong></div>
+                    <div class="stat-row"><span>Incidenza Gruppo:</span> <strong>${d.pctSum.toFixed(2)}%</strong></div>
+                    <div class="chart-container-popup"><canvas id="popupChart-${index}"></canvas></div>
+                `;
+            }
+
+            marker.bindPopup(popupContent, { className: 'custom-popup', maxWidth: 280 });
+            
+            marker.on('popupopen', () => {
+                const ctx = document.getElementById(`popupChart-${index}`);
+                if (ctx && !activePopupChart && d.cases > 0) {
+                    activePopupChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Casi', 'Ricov.', 'ICU', 'Dec.'],
+                            datasets: [{
+                                data: [d.cases, d.hosp, d.icu, d.deaths],
+                                backgroundColor: ['rgba(56, 189, 248, 0.7)', 'rgba(250, 204, 21, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(244, 63, 94, 0.7)'],
+                                borderColor: ['rgba(56, 189, 248, 1)', 'rgba(250, 204, 21, 1)', 'rgba(249, 115, 22, 1)', 'rgba(244, 63, 94, 1)'],
+                                borderWidth: 1, borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                                x: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 11, weight: 'bold' } } }
+                            },
+                            animation: { duration: 600 }
+                        }
+                    });
+                }
+            });
+
+            marker.on('popupclose', () => {
+                if (activePopupChart) { activePopupChart.destroy(); activePopupChart = null; }
+            });
+
+            markersLayer.addLayer(marker);
+        });
+    }
+
+    function updateDashboard() {
+        const selectedPeriod = uniquePeriods[timeSlider.value];
+        const selectedSex = sexFilter.value;
+        const selectedAge = ageFilter.value;
+        const metric = mapMetricSelect.value;
+
+        if (chartTopProvinces) chartTopProvinces.destroy();
+        if (chartAgeDist) chartAgeDist.destroy();
+        if (chartGender) chartGender.destroy();
+        if (chartTrend) chartTrend.destroy();
+
+        // --- GRAFICO 1: Top 5 Province ---
+        const periodFiltered = rawData.filter(row => {
+            if (getData(row, 'period', 0) !== selectedPeriod) return false;
+            if (selectedSex !== 'all' && getData(row, 'sex', 3) !== selectedSex) return false;
+            if (selectedAge !== 'all' && getData(row, 'age_group', 4) !== selectedAge) return false;
+            return true;
+        });
+
+        const regionMetrics = {};
+        periodFiltered.forEach(row => {
+            const region = getData(row, 'region_name', 1);
+            if (!region || region.length < 3) return;
+            const val = Number(getData(row, metric, metric === 'cases' ? 5 : (metric === 'hosp' ? 6 : (metric === 'icu' ? 7 : 8)))) || 0;
+            regionMetrics[region] = (regionMetrics[region] || 0) + val;
+        });
+
+        const sortedRegions = Object.entries(regionMetrics).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const metricLabels = { cases: 'Casi', hosp: 'Ricoveri', icu: 'ICU', deaths: 'Decessi' };
+        
+        chartTopProvinces = new Chart(document.getElementById('chartTopProvinces'), {
+            type: 'bar',
+            data: {
+                // CORREZIONE APPLICATA: rimuove solo la parte tra parentesi, lasciando "A Coruña" intatto
+                labels: sortedRegions.map(r => r[0].replace(/ \(.*\)/, '')), 
+                datasets: [{
+                    label: metricLabels[metric],
+                    data: sortedRegions.map(r => r[1]),
+                    backgroundColor: 'rgba(244, 63, 94, 0.7)',
+                    borderColor: 'rgba(244, 63, 94, 1)',
+                    borderWidth: 1, borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { display: false }, ticks: { color: '#f1f5f9', font: { size: 11 } } }
+                }
+            }
+        });
+
+        // --- GRAFICO 2: Distribuzione per Età ---
+        const ageFiltered = rawData.filter(row => {
+            if (getData(row, 'period', 0) !== selectedPeriod) return false;
+            if (selectedSex !== 'all' && getData(row, 'sex', 3) !== selectedSex) return false;
+            return true;
+        });
+
+        const ageCases = {};
+        ageFiltered.forEach(row => {
+            const age = getData(row, 'age_group', 4);
+            ageCases[age] = (ageCases[age] || 0) + (Number(getData(row, 'cases', 5)) || 0);
+        });
+
+        const ageOrder = ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'];
+        const sortedAges = ageOrder.filter(a => ageCases[a] > 0);
+
+        chartAgeDist = new Chart(document.getElementById('chartAgeDist'), {
+            type: 'bar',
+            data: {
+                labels: sortedAges,
+                datasets: [{
+                    label: 'Casi',
+                    data: sortedAges.map(a => ageCases[a]),
+                    backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                    borderColor: 'rgba(56, 189, 248, 1)',
+                    borderWidth: 1, borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { display: false }, ticks: { color: '#f1f5f9', font: { size: 11 } } }
+                }
+            }
+        });
+
+        // --- GRAFICO 3: Confronto per Genere ---
+        const genderFiltered = rawData.filter(row => {
+            if (getData(row, 'period', 0) !== selectedPeriod) return false;
+            if (selectedAge !== 'all' && getData(row, 'age_group', 4) !== selectedAge) return false;
+            return true;
+        });
+
+        const genderCases = { Male: 0, Female: 0 };
+        genderFiltered.forEach(row => {
+            const sex = getData(row, 'sex', 3);
+            if (sex === 'Male' || sex === 'Female') {
+                genderCases[sex] += (Number(getData(row, 'cases', 5)) || 0);
+            }
+        });
+
+        chartGender = new Chart(document.getElementById('chartGender'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Maschi', 'Femmine'],
+                datasets: [{
+                    data: [genderCases.Male, genderCases.Female],
+                    backgroundColor: ['rgba(56, 189, 248, 0.8)', 'rgba(244, 63, 94, 0.8)'],
+                    borderColor: '#0f172a', borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { 
+                    legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                                return ` ${context.label}: ${context.raw.toLocaleString('it-IT')} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- GRAFICO 4: Andamento Temporale ---
+        const trendFiltered = rawData.filter(row => {
+            if (selectedSex !== 'all' && getData(row, 'sex', 3) !== selectedSex) return false;
+            if (selectedAge !== 'all' && getData(row, 'age_group', 4) !== selectedAge) return false;
+            return true;
+        });
+
+        const trendCases = {};
+        uniquePeriods.forEach(p => trendCases[p] = 0);
+        trendFiltered.forEach(row => {
+            const period = getData(row, 'period', 0);
+            trendCases[period] = (trendCases[period] || 0) + (Number(getData(row, 'cases', 5)) || 0);
+        });
+
+        chartTrend = new Chart(document.getElementById('chartTrend'), {
+            type: 'line',
+            data: {
+                labels: uniquePeriods,
+                datasets: [{
+                    label: 'Casi Totali',
+                    data: uniquePeriods.map(p => trendCases[p]),
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    borderWidth: 2, fill: true, tension: 0.4,
+                    pointRadius: uniquePeriods.map(p => p === selectedPeriod ? 5 : 2),
+                    pointBackgroundColor: uniquePeriods.map(p => p === selectedPeriod ? '#f43f5e' : '#38bdf8')
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+                }
+            }
+        });
+    }
+
+    function togglePlay() {
+        if (isPlaying) {
+            clearInterval(playInterval);
+            isPlaying = false;
+            playBtn.innerHTML = '▶️ Avvia Animazione Temporale';
+            playBtn.classList.remove('playing');
+        } else {
+            isPlaying = true;
+            playBtn.innerHTML = '⏸️ Pausa Animazione';
+            playBtn.classList.add('playing');
+            playInterval = setInterval(() => {
+                let currentVal = parseInt(timeSlider.value);
+                if (currentVal < uniquePeriods.length - 1) {
+                    timeSlider.value = currentVal + 1;
+                    updateAll();
+                } else {
+                    timeSlider.value = 0;
+                    updateAll();
+                }
+            }, 1000);
+        }
+    }
+
+    [timeSlider, mapMetricSelect, sexFilter, ageFilter].forEach(el => {
+        el.addEventListener('input', () => { if (isPlaying) togglePlay(); updateAll(); });
+        el.addEventListener('change', () => { if (isPlaying) togglePlay(); updateAll(); });
+    });
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        statusMsg.innerText = 'Lettura file CSV in corso...';
+        statusMsg.style.color = '#38bdf8';
+        Papa.parse(file, {
+            header: true, skipEmptyLines: true,
+            complete: function(results) {
+                if (results.data && results.data.length > 0) processData(results.data);
+                else { statusMsg.innerText = 'File CSV vuoto.'; statusMsg.style.color = '#f43f5e'; }
+            },
+            error: function(err) {
+                statusMsg.innerText = 'Errore: ' + err.message;
+                statusMsg.style.color = '#f43f5e';
+            }
+        });
+    });
+
+    fetch('spain_covid19_unified_data2.csv')
+        .then(response => { if (!response.ok) throw new Error('File non trovato'); return response.text(); })
+        .then(csvText => {
+            Papa.parse(csvText, { header: true, skipEmptyLines: true, complete: function(results) { processData(results.data); } });
+        })
+        .catch(() => {
+            statusMsg.innerText = '⚠️ Usa il pulsante "Carica Dataset CSV" per iniziare.';
+        });
+</script>
+
+</body>
+</html>
