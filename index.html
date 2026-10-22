@@ -192,6 +192,7 @@
             border-radius: 8px;
             background: rgba(255,255,255,0.03);
             color: var(--text-secondary);
+            transition: all 0.3s ease;
         }
 
         .chart-box {
@@ -251,11 +252,11 @@
     </div>
 
     <p class="description">
-        Benvenuto nella dashboard analitica. Carica il dataset CSV per visualizzare l'impatto della pandemia. 
-        Usa i filtri per esplorare i dati per periodo, genere e fascia d'età. La mappa e i grafici si aggiorneranno in tempo reale.
+        Benvenuto nella dashboard analitica. Usa i filtri per esplorare i dati per periodo, genere e fascia d'età. La mappa e i grafici si aggiorneranno in tempo reale.
     </p>
 
-    <label for="csvFile" class="btn-primary">📂 Carica Dataset CSV</label>
+    <!-- Questo pulsante verrà nascosto automaticamente se i dati si caricano da soli -->
+    <label for="csvFile" class="btn-primary" id="uploadBtn">📂 Carica Dataset CSV (Fallback)</label>
     <input type="file" id="csvFile" accept=".csv">
 
     <button class="btn-primary btn-play" id="playBtn" onclick="togglePlay()">▶️ Avvia Animazione Temporale</button>
@@ -292,7 +293,7 @@
         </select>
     </div>
 
-    <div id="statusMsg" class="status-msg">In attesa del caricamento dati...</div>
+    <div id="statusMsg" class="status-msg">Caricamento dati in corso...</div>
 </div>
 
 <!-- Pannello Destro: Dashboard -->
@@ -321,7 +322,7 @@
 </div>
 
 <script>
-    // 1. Inizializzazione Mappa con Esri (PROVATO E FUNZIONANTE, NO API KEY)
+    // 1. Inizializzazione Mappa con Esri + Filtro CSS Dark Mode
     const map = L.map('map', { zoomControl: false }).setView([40.4168, -3.7038], 6);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     
@@ -347,6 +348,7 @@
     const ageFilter = document.getElementById('ageFilter');
     const statusMsg = document.getElementById('statusMsg');
     const playBtn = document.getElementById('playBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
 
     let isPlaying = false;
     let playInterval = null;
@@ -360,9 +362,7 @@
 
     function processData(data) {
         rawData = data;
-        statusMsg.innerText = 'Elaborazione dati in corso...';
-        statusMsg.style.color = '#38bdf8';
-
+        
         const periods = [...new Set(data.map(d => getData(d, 'period', 0)).filter(Boolean))].sort();
         const sexes = [...new Set(data.map(d => getData(d, 'sex', 3)).filter(Boolean))].sort();
         const ages = [...new Set(data.map(d => getData(d, 'age_group', 4)).filter(Boolean))].sort();
@@ -385,8 +385,12 @@
         ageFilter.innerHTML = '<option value="all">Tutte le fasce</option>';
         ages.forEach(a => { ageFilter.innerHTML += `<option value="${a}">${a}</option>`; });
 
-        statusMsg.innerText = `✅ Caricate ${data.length} righe. Dashboard pronta.`;
+        // 🌟 NOVITÀ: Nascondi il pulsante di caricamento e mostra messaggio di successo
+        if (uploadBtn) uploadBtn.style.display = 'none';
+        statusMsg.innerText = '✅ Dati caricati automaticamente. Dashboard pronta.';
         statusMsg.style.color = '#10b981';
+        statusMsg.style.background = 'rgba(16, 185, 129, 0.1)';
+        statusMsg.style.border = '1px solid #10b981';
         
         updateAll();
     }
@@ -541,8 +545,7 @@
         chartTopProvinces = new Chart(document.getElementById('chartTopProvinces'), {
             type: 'bar',
             data: {
-                // CORREZIONE APPLICATA: rimuove solo la parte tra parentesi, lasciando "A Coruña" intatto
-                labels: sortedRegions.map(r => r[0].replace(/ \(.*\)/, '')), 
+                labels: sortedRegions.map(r => r[0].replace(/ \(.*\)/, '')), // CORREZIONE APPLICATA
                 datasets: [{
                     label: metricLabels[metric],
                     data: sortedRegions.map(r => r[1]),
@@ -708,6 +711,7 @@
         el.addEventListener('change', () => { if (isPlaying) togglePlay(); updateAll(); });
     });
 
+    // Gestione caricamento manuale (rimane come fallback di sicurezza)
     document.getElementById('csvFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -717,22 +721,21 @@
             header: true, skipEmptyLines: true,
             complete: function(results) {
                 if (results.data && results.data.length > 0) processData(results.data);
-                else { statusMsg.innerText = 'File CSV vuoto.'; statusMsg.style.color = '#f43f5e'; }
-            },
-            error: function(err) {
-                statusMsg.innerText = 'Errore: ' + err.message;
-                statusMsg.style.color = '#f43f5e';
             }
         });
     });
 
+    // Tentativo di caricamento automatico all'avvio
     fetch('spain_covid19_unified_data2.csv')
         .then(response => { if (!response.ok) throw new Error('File non trovato'); return response.text(); })
         .then(csvText => {
             Papa.parse(csvText, { header: true, skipEmptyLines: true, complete: function(results) { processData(results.data); } });
         })
         .catch(() => {
+            // Se il fetch fallisce, mostriamo il pulsante di caricamento manuale
             statusMsg.innerText = '⚠️ Usa il pulsante "Carica Dataset CSV" per iniziare.';
+            statusMsg.style.color = '#f59e0b';
+            if (uploadBtn) uploadBtn.style.display = 'block';
         });
 </script>
 
